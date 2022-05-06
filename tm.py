@@ -10,7 +10,6 @@ class State:
         self.transition_rules[reading_symbol] = destination_state
 
     def read_symbol(self, reading_symbol):
-        print(self.transition_rules)
         return self.transition_rules[reading_symbol]
 
     def set_final(self, isFinal):
@@ -22,31 +21,44 @@ class State:
     def is_final(self):
         return self.final
 
+class _Tape_Segment:
+    def __init__(self, val='_', next=None, prev=None):
+        self.value = val
+        self.next = next
+        self.prev = prev
 
 class Tape:
     def __init__(self, initial_tape=[]):
-        self.tape = initial_tape if initial_tape else []
-        self.rw_head = 0
+        self.start = None
+        self.curr = None
+        if initial_tape:
+            self.start = _Tape_Segment(initial_tape[0])
+            self.curr = self.start
+            if initial_tape[1:]:
+                for v in initial_tape[1:]:
+                    next = _Tape_Segment(v, None, self.curr)
+                    self.curr.next = next
+                    self.curr = next
+                self.curr = self.start
 
     def write(self, direction, write_val):
-        self.tape[self.rw_head] = write_val if self.rw_head < len(self.tape) else self.tape.append(self.rw_head)
+        self.curr.value = write_val
         if direction == 'R':
-            self.rw_head += 1 
+            if not self.curr.next:
+                self.curr.next = _Tape_Segment('_', None, self.curr)
+            self.curr = self.curr.next
         else:
-             self.rw_head -= 1
+            if not self.curr.prev:
+                self.curr.prev =_Tape_Segment('_', self.curr, None)
+            self.curr = self.curr.prev
 
     def read(self):
-        return self.tape[self.rw_head] if self.rw_head < len(self.tape) else '_'
+        return self.curr.value
     
 
 class TM:
-    def __init__(self) -> None:
-        self.states = {}
-        self.alphabet = set()
-        self.start = None
-        self.accepts = False
-        self.new()
-        self.tape = Tape()
+    def __init__(self, tm_file_name='tm.txt') -> None:
+        self.new(tm_file_name)
 
     #creates a new NFA as specified by input NFA file.
     def new(self, tm_file_name='tm.txt'):
@@ -57,14 +69,14 @@ class TM:
         self.accept = None
         self.reject = None
         self.accepts = False
-        self.rejects = False
+        self.tape = Tape()
         with open(tm_file_name) as tm_file:
             #read states
             state_name_list = tm_file.readline().rstrip().split(',')
             for state_name in state_name_list: 
                 self.states[state_name] = State(state_name)
-                self.accept = state_name if state_name == 'accept' else None
-                self.reject = state_name if state_name == 'reject' else None
+                if state_name == 'accept': self.accept = self.states[state_name]
+                if state_name == 'reject': self.reject = self.states[state_name]
             #read alphabet
             letters = tm_file.readline().rstrip().split(',')
             for l in letters: self.alphabet.add(l)
@@ -79,12 +91,11 @@ class TM:
             line = tm_file.readline()
             while line:
                 rule = line.rstrip().split(',')
-                print(rule, rule[0])
                 self.states[rule[0]].add_rule(rule[1], (rule[2], self.states[rule[3]], rule[4]))
                 line = tm_file.readline()
             tm_file.close()
 
-    #simulates NFA for every string in input file and writes results to output file.
+    #simulates TM
     def run(self, input_file_name='input.txt', output_file_name='output.txt'):
         #clear output file
         with open(output_file_name, 'w') as out:
@@ -106,22 +117,18 @@ class TM:
             input_file.close()
 
     def simulate(self, current):
-        #kills path if no transition rule for previous symbol or path is @ cycle.
         if current == self.accept: 
             self.accepts = True
             return
         elif current == self.reject:
             self.rejects =True
             return
-
-        #if input string not empty read leading character and check if any path from it is valid
+        if self.tape.read() not in current.transition_rules:
+            self.rejects = True
+            return
         next = current.read_symbol(self.tape.read())
-        print(current.name)
-        print(self.tape.read())
         self.tape.write(next[2], next[0])
         self.simulate(next[1])
-
-
 
 
 def main():
